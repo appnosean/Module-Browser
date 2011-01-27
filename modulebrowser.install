@@ -1,0 +1,220 @@
+<?php 
+// $Id$
+
+/**
+ * @file
+ * 
+ * Contains steps for installation of the module.
+ */
+
+/**
+ * Implements hook_install()
+ */
+function modulebrowser_install() {
+  $path = drupal_get_path('module', 'modulebrowser');
+  include_once($path . '/modulebrowser.csv.inc');
+  // Load default values from files into database
+  // PROJECTS
+  $path_projects = $path . '/projects.csv';
+  $projects = modulebrowser_read_lookup_table_from_csv($path_projects, ',', '-', array(0 => ''), ON_COLLISION_SKIP, 0);
+  foreach ($projects as $project) {
+    $insert_project = db_insert('modulebrowser_projects')
+                        ->fields(array(
+                          'pid' => $project['pid'],
+                          'title' => $project['title'],
+                          'short_name' => $project['short_name'],
+                          'description' => $project['description'],
+                          'link' => $project['link'],
+                          'screenshot_url' => $project['screenshot_url'],
+                          'status' => $project['status'],
+                          'type' => $project['type'],
+                          'terms' => $project['terms'],
+                          'changed' => $project['changed'],
+                        ))
+                        ->execute();
+  }
+  // RELEASES
+  $path_releases = $path . '/releases.csv';
+  $releases = modulebrowser_read_lookup_table_from_csv($path_releases, ',', '-', array(0 => ''), ON_COLLISION_SKIP, 0);
+  foreach ($releases as $release) {
+    $insert_release = db_insert('modulebrowser_releases')
+                        ->fields(array(
+                          'rid' => $release['rid'],
+                          'pid' => $release['pid'],
+                          'version' => $release['version'],
+                          'tag' => $release['tag'],
+                          'version_major' => $release['version_major'],
+                          'version_extra' => $release['version_extra'],
+                          'version_patch' => $release['version_patch'],
+                          'date' => $release['date'],
+                          'download_link' => $release['download_link'],
+                          'hash' => $release['hash'],
+                          'filesize' => $release['filesize'],
+                        ))
+                        ->execute();
+  }
+  
+}
+
+/**
+ * Implements hook_uninstall()
+ */
+function modulebrowser_uninstall() {
+  drupal_uninstall_schema('modulebrowser');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function modulebrowser_schema() {
+  // Projects table.
+  $schema['modulebrowser_projects'] = array(
+    'description' => 'Table to store all projects available',
+    'fields' => array(
+      'pid' => array(
+        'description' => 'Project ID',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'title' => array(
+        'description' => 'Human readable project name',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'short_name' => array(
+        'description' => 'Machine readable name',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'description' => array(
+        'description' => 'Project description',
+        'type' => 'varchar',
+        'length' => 2048,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'link' => array(
+        'description' => 'Link to project page on drupal.org',
+        'type' => 'varchar',
+        'length' => 512,
+        'not null' => TRUE,
+        'default' => 'http://drupal.org/',
+      ),
+      'screenshot_url' => array(
+        'description' => 'Url to get screenshot',
+        'type' => 'varchar',
+        'length' => 512,
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'status' => array(
+        'description' => 'Status of project on drupal.org',
+        'type' => 'int',
+        'length' => 11,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'type' => array(
+        'description' => 'Type of project',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'terms' => array(
+        'description' => 'Terms linked to the project',
+        'type' => 'varchar',  
+        'length' => 1024,  
+        'not null' => FALSE,
+      ),
+      'changed' => array(
+        'description' => 'Timestamp of last modified',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('pid'),
+  );
+  
+  $schema['modulebrowser_releases'] = array(
+    'description' => 'Table to store project release history',
+    'fields' => array(
+      'rid' => array(
+        'description' => 'Release ID',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'pid' => array(
+        'description' => 'Project ID (modulebrowser_projects)',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'version' => array(
+        'description' => 'Version of release',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+      ),
+      'tag' => array(
+        'description' => 'Tag',
+        'type' => 'varchar', 
+        'length' => 128,
+        'not null' => TRUE,
+      ),
+      'version_major' => array(
+        'description' => 'Major version',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+      ),
+      'version_extra' => array(
+        'description' => 'Extra version information.',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => FALSE,
+      ),
+      'version_patch' => array(
+        'description' => 'Extra version information',
+        'type' => 'varchar',
+        'length' => 128, 
+        'not null' => FALSE,
+      ),
+      'date' => array(
+        'description' => 'timestamp of release',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'download_link' => array(
+        'description' => 'Link to download this release',
+        'type' => 'varchar',
+        'length' => 512,
+        'not null' => TRUE,
+      ),      
+      'hash' => array(
+        'description' => 'MD5 hash for security control',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '0',
+      ),
+      'filesize' => array(
+        'description' => 'Filesize',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('rid'),
+    'indexes' => array('pid' => array('pid')),
+  );
+  
+  return $schema;
+}

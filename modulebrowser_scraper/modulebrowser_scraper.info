@@ -1,0 +1,10 @@
+; $Id$
+name = Module browser scraping
+description = Get projects information from combination of XML files and scraping
+package = Core - Extra
+version = VERSION
+core = 7.x
+dependencies[] = modulebrowser
+files[] = modulebrowser_scraper.module
+files[] = modulebrowser_scraper.drush.inc
+required = FALSE

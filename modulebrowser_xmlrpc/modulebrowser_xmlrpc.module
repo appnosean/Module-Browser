@@ -1,0 +1,18 @@
+<?php 
+// $Id$
+
+/**
+ * @file
+ * 
+ *  Module to handle XMLRPC interface for module browser.
+ *  XMLRPC is used to synchronize the projects data, for all available projects.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function modulebrowser_xmlrpc_menu() {
+  $items = array();
+  
+  return $items;
+}

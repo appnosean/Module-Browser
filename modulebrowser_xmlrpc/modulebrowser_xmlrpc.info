@@ -1,0 +1,11 @@
+; $Id$
+name = Module Browser XMLRPC
+description = Module to update information for module browser, using XMLRPC.
+package = Core - Extra
+version = VERSION
+core = 7.x
+dependencies[] = modulebrowser
+files[] = modulebrowser_xmlrpc.module
+files[] = modulebrowser_xmlrpc.inc
+required = FALSE
+configure = admin/config/modulebrowser_xmlrpc

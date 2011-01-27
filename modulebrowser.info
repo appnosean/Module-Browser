@@ -1,0 +1,15 @@
+; $Id$
+name = Module browser
+description = Allows you to easily select the packages to download and install on your site.
+package = Core - Extra
+version = VERSION
+core = 7.x
+files[] = modulebrowser.install
+files[] = modulebrowser.module
+files[] = modulebrowser.inc
+files[] = modulebrowser.admin.inc
+files[] = modulebrowser.pages.inc
+files[] = modulebrowser.csv.inc
+files[] = modulebrowser.drush.inc
+required = FALSE
+configure = admin/config/modulebrowser

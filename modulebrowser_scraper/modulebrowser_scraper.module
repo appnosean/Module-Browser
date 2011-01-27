@@ -1,0 +1,340 @@
+<?php 
+// $Id$
+
+
+/**
+ * @file
+ * 
+ * Use XML file and scraping to get projects information.
+ */
+
+/**
+ * Helper function to get all the projects
+ * Using big file from htt://updates.drupal.org/
+ * Then process the file, project per project.
+ * http://updates.drupal.org/release-history/project-list/all
+ * 
+ * @return array()
+ *    Array containing succesfull and failed
+ */
+function modulebrowser_scraper_update_all_projects() {
+  // First fetch new file
+  if (variable_get('modulebrowser_debugging', '0') == '0') {
+    $url = UPDATE_DEFAULT_URL . '/project-list/all';
+    $file = drupal_http_request($url, array());
+    $xml = simplexml_load_string($file->data);
+  }
+  else {
+    // Use local file in debugging mode.
+    $xml = simplexml_load_file('projects');
+  }
+  
+  // Loop trough each project.
+  foreach( $xml->project as $project ) {
+    $success = modulebrowser_scraper_parse_single_project($project);
+    // Detect failure of one project => to return correct status
+    if( $success ) {
+      $processed['success']++;
+    }
+    else {
+      $processed['error']++;
+    }
+  }
+  
+  return $processed;
+} 
+
+/**
+ * Parse single project and write to database
+ * This data comes from the large file with all projects,
+ * it does not contain certain data (like description).
+ * This extra data will be added later.
+ * 
+ * @param stdClass $project
+ *    Object containing all info to create one project
+ * @return boolean
+ *    Return if succesfull or not.
+ */
+function modulebrowser_scraper_parse_single_project($project) {
+  // Extract all variables needed to an object.
+  $db_project->title = (string) $project->title;
+  $db_project->short_name = (string) $project->short_name;
+  $db_project->link = (string) $project->link;
+  $db_project->status = 1;//(string) $project->project_status; 
+  $db_project->type =  modulebrowser('type', $project->terms);
+  $db_project->terms = implode(', ', modulebrowser('term', $project->terms)); 
+  $db_project->changed = time();
+  $db_project->api_version = modulebrowser('api', $project->api_versions);
+  // Filter out drupal 7 modules
+  if (!in_array('7.x', $db_project->api_version)) {
+    return TRUE;
+  } 
+
+  // Check if we already have a project like this in the database
+  $existing_project = db_query("SELECT * FROM {modulebrowser_projects} WHERE title = :title AND short_name = :short_name", 
+                                array(':title' => $db_project->title, ':short_name' => $db_project->short_name))->fetchObject();
+                                
+  if( $existing_project != FALSE) {
+    $update = db_update('modulebrowser_projects')
+      ->fields(array(
+        'title' => $db_project->title,
+        'short_name' => $db_project->short_name,
+        'link' => $db_project->link,
+        'status' => $db_project->status,
+        'terms' => $db_project->terms,
+        'changed' => $existing_project->changed, 
+      ))
+      ->condition('pid', $existing_project->pid)
+      ->execute();
+  }
+  else {
+    // New entry.
+    $db_project->pid = NULL;
+    $write_record = drupal_write_record('modulebrowser_projects', $db_project, NULL);
+    
+    if( $write_record != FALSE ) {
+      $result = TRUE;
+    }
+    else {
+      $result = FALSE;
+    }
+  }
+  
+  return $result;
+}
+
+/**
+ * Function to get all projects and then process the release information for project. 
+ * Gets all projects from database and will request the release information.
+ */
+function modulebrowser_scraper_all_releases() {
+  $projects = db_query("SELECT pid, short_name FROM {modulebrowser_projects}");
+  foreach ($projects as $project) {
+    modulebrowser_scraper_project_releases($project->pid, $project->short_name, '7.x');
+    
+  }
+}
+
+/**
+ * Function to store release info for one version of a project to the database.
+ * Get and process release information for one project.
+ * URL => http://updates.drupal.org/release-history/'project'/'version'
+ * 
+ * @param int $pid
+ *    Project ID
+ * @param string $short_name
+ *    Projects short name (computer friendly name)
+ * @param string $version
+ *    Version to get release information for (general drupal version)
+ * @return boolean
+ *    Return if succesfull or not.
+ */
+function modulebrowser_scraper_project_releases ($pid, $short_name, $version) {
+  // Get file.
+  $base_url = variable_get('modulebrowser_url', 'http://updates.drupal.org/release-history/');
+  // Construct url to match project syntax.
+  $url = $base_url . implode('/', array($short_name, $version));
+  
+  $file = drupal_http_request($url, $headers = array(), 'GET', 3);
+  
+  // Fetch HTML code errors
+  switch ($file->code) {
+    case '500':
+      
+      break;
+  }
+  
+  $xml = simplexml_load_string($file->data);
+  
+  $releases = modulebrowser('release', $xml->releases);
+  
+  if (empty($releases)) {
+    return TRUE;
+  }
+  
+  // Only process release information (rest of the data is already in other table).
+  foreach ($releases as $release) {
+    $rid = db_query("SELECT rid FROM {modulebrowser_releases} WHERE version = :version",
+                  array(':version' => $release->version))->fetchField();
+
+    $release->pid = $pid;
+    if ( $rid == FALSE ) {
+      // New entry
+      $release->rid = NULL;
+      drupal_write_record('modulebrowser_releases', $release, NULL);
+    }
+    else {
+      // Update entry
+      $release->rid = $rid;
+      drupal_write_record('modulebrowser_releases', $release, 'rid');
+    }
+  }
+  
+  return TRUE;
+}
+
+/**
+ * Function to scrape webpage to get the extra
+ * information for a project
+ * 
+ */
+function modulebrowser_scraper_scrape_all() {
+  $types = array('Modules', 'Themes');
+  $drupal_url = 'http://drupal.org';
+  
+  foreach ($types as $type) {
+    $page = 0;
+    $url = 'http://drupal.org/project/'.$type.'?page=';
+    $items_found = TRUE;
+    while($items_found) {
+      // Get page
+      $dom = new DOMDocument();
+      @$dom->loadHTMLFile($url.$page);
+      $xml = simplexml_import_dom($dom);
+      $items_found = FALSE;
+      foreach($xml->xpath('//div[contains(@class,\'project-item\')]') as $item) {
+        $items_found = TRUE;
+        $xml_item = simplexml_load_string($item->asXML());
+        // Get Project link to match to database entry
+        $extract_link = $xml_item->xpath('//h2[1]/a[1]'); 
+        if(is_array($extract_link) && !empty($extract_link)) {
+          foreach ($extract_link[0]->attributes() as $key => $value) {
+            if ($key == 'href') {
+              $project_link = $drupal_url . (string) $value;
+            } 
+          }
+        }
+        // Check if project in database
+        $pid = db_query("SELECT pid FROM {modulebrowser_projects} WHERE link = :link AND type = :type", array(':link' => $project_link, ':type' => $type))->fetch();
+        if($pid == FALSE) {
+          // Item not found => do not process
+          continue;
+        }
+        
+        // Get description
+        $description = '';
+        foreach($xml_item->xpath('p') as $extract_desc) {
+          $description .= '<p>'.trim((string) $extract_desc).'</p>';  
+        }
+        $project = new stdClass();
+        $project->pid = $pid->pid;
+        $project->description = $description;
+        
+        // Get image if one is present
+        $image = $xml_item->xpath('//a/img');
+        if(is_array($image) && !empty($image)) {
+          foreach ($image[0]->attributes() as $key => $value) {
+            if($key == 'src') {
+              $project->screenshot_url = (string) $value;
+            }
+          }
+        }
+        
+        // Write data to database
+        drupal_write_record('modulebrowser_projects', $project, 'pid');
+      }
+      
+      $page++;
+    }
+  }
+}
+
+/**
+ * Helper function to extract data from object
+ * @param string $type
+ *    Type of data to get
+ * @param stdClass $object
+ *    Object to get data from
+ * @return array()
+ *    Array containing extracted data
+ */
+function modulebrowser($type, $object) {
+  $data = NULL;
+  $protected = array('Drupal project', 'Modules', 'Themes');
+  
+  switch( $type ) {
+    case 'api':
+      foreach( $object->api_version as $element) {
+        $value = trim((string) $element);
+          $data[$value] = $value;
+      }
+      break;
+      
+    case 'term':
+      if (is_array($object->term)) {
+        foreach ($object->term as $element ) {
+          $value = (string) $element->value;
+          if (!in_array($value, $protected)) {
+            $data[$value] = $value;
+          }
+        }
+      }
+      elseif (!empty($object->term)) {
+        $value = (string) $object->term->value;
+        if (!in_array($value, $protected)) {
+          $data[$value] = $value;
+        }
+        $data[$value] = $value;
+      } 
+      break;
+      
+    case 'type':
+      if (is_array($object->term)) {
+        foreach ($object->term as $element ) {
+          $value = (string) $element->value;
+          if (in_array($value, $protected)) {
+            $data = $value;
+          }
+        }
+      }
+      elseif (!empty($object->term)) {
+        $value = (string) $object->term->value;
+        if (in_array($value, $protected)) {
+          $data = $value;
+        }
+      } 
+      break;
+      
+    case 'release':
+      if(is_array($object->release)) {
+        foreach ($object->release as $element ) {
+            $release->version         =   (string)  $element->version;
+            $release->tag             =   (string)  $element->tag;
+            $release->version_major   =   (string)  $element->version_major;
+            $release->version_extra   =   (string)  $element->version_extra;
+            $release->status          =   (string)  $element->status;
+            $release->download_link   =   (string)  $element->download_link;
+            $release->date            =   (int)     $element->date;
+            $release->hash            =   (string)  $element->mdhash;
+            $release->filesize        =   (int)     $element->filesize;
+            
+            $data[] = $release;
+        }
+      }
+      elseif (!empty($object->release)) {
+        $element = $object->release;
+        
+        $release->name            =   (string)  $element->name;
+        $release->version         =   (string)  $element->version;
+        $release->tag             =   (string)  $element->tag;
+        $release->version_major   =   (string)  $element->version_major;
+        $release->version_extra   =   (string)  $element->version_extra;
+        $release->status          =   (string)  $element->status;
+        $release->release_link    =   (string)  $element->release_link;
+        $release->download_link   =   (string)  $element->download_link;
+        $release->date            =   (int)     $element->date;
+        $release->hash            =   (string)  $element->mdhash;
+        $release->filesize        =   (int)     $element->filesize;
+        
+        $data[] = $release;
+      }
+      break;
+      
+    default:
+      // Wrong option => do nothing.
+      $data = array();
+      break;
+  }
+  
+  return $data;
+}

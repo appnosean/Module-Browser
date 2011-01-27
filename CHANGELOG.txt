@@ -1,0 +1,5 @@
+// $Id$
+
+Module browser 7.x-1.0-alpha1, 2010-04-29
+----------------------------------------
+Initial release for modulebrowser module. Supporting Drupal 7.x.

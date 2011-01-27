@@ -1,0 +1,121 @@
+<?php 
+// $Id$
+
+/**
+ * @file
+ * 
+ */
+
+include drupal_get_path('module', 'modulebrowser').'/modulebrowser.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function modulebrowser_menu() {
+  $items['admin/config/modulebrowser'] = array(
+    'title' => 'Module browser',
+    'description' => 'Module browser settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('modulebrowser_settings_form'),
+    'access arguments' => array('view module browser'),
+    'position' => 'right',
+    'file' => 'modulebrowser.admin.inc',
+  );
+ 
+  
+  $items['admin/modulebrowser'] = array(
+    'title' => 'Module browser',
+    'page callback' => 'modulebrowser_page',
+    'page arguments' => array('Modules'),
+    'access arguments' => array('view module browser'),
+    'file' => 'modulebrowser.pages.inc',
+    'type' => MENU_NORMAL_ITEM
+  );
+  
+  $items['admin/modulebrowser/modules'] = array(
+    'title' => 'Modules',
+    'description' => 'Module browser main overview',
+    'page callback' => 'modulebrowser_page',
+    'page arguments' => array('Modules'),
+    'access arguments' => array('view module browser'),
+    'file' => 'modulebrowser.pages.inc',
+    'type' => MENU_DEFAULT_LOCAL_TASK
+  );
+  
+  $items['admin/modulebrowser/themes'] = array(
+    'title' => 'Themes',
+    'description' => 'Module browser main overview',
+    'page callback' => 'modulebrowser_page',
+    'page arguments' => array('Themes'),
+    'access arguments' => array('view module browser'),
+    'file' => 'modulebrowser.pages.inc',
+    'type' => MENU_LOCAL_TASK
+  );
+  
+  $items['admin/modulebrowser/install/%'] = array(
+    'title' => 'Module browser',
+    'page callback' => 'modulebrowser_installation_page',
+    'page arguments' => array(2, 3),
+    'access arguments' => array('view module browser'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'modulebrowser.pages.inc',
+  );
+  
+  return $items;
+}
+
+/**
+ * Implements hook_forms().
+ */
+function modulebrowser_forms() {
+  $forms = array();
+  
+  foreach (modulebrowser_get_projects() as $project) {
+    $forms['modulebrowser_' . $project->short_name. '_install_form'] = array(
+      'callback' => 'modulebrowser_install_form',
+      'callback_arguments' => array($project->short_name, $project->pid),
+      'file' => 'modulebrowser.inc',
+    );
+  }
+  
+  return $forms;
+}
+
+/**
+ * Implements hook_permission()
+ */
+function modulebrowser_permission() {
+  return array(
+  'view module browser' => array(
+      'title' => t('View module browser'),
+      'description' => drupal_placeholder(array('text' => t('View the module browser page'))),
+     ),
+  );
+}
+
+/**
+ * Implements hook_theme() 
+ */
+function modulebrowser_theme() {
+  return array(
+    //Template for list of projects
+    'modulebrowser_list' => array(
+      'variables' => array('projects_list' => NULL),
+      'file' => 'modulebrowser.pages.inc',
+      'template' => 'modulebrowser_list',
+    ),
+    // Template for single project
+    'modulebrowser_project' => array(
+      'variables' => array('project' => NULL),
+      'file' => 'modulebrowser.pages.inc',
+      'template' => 'modulebrowser_project',
+    ),
+  );
+}
+
+/**
+ * Implements hook_dashboard_regions()
+ */
+function modulebrowser_dashboard_regions() {
+  return array('sidebar_right' => 'Right sidebar for module browser page');
+}
