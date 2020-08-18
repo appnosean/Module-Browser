@@ -1,3 +1,6 @@
+This repo has been moved to Bitbucket
+https://bitbucket.org/appno/module-browser/src/master/
+
 README.txt
 ==========
 
